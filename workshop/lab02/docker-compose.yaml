@@ -1,0 +1,59 @@
+version: "3.5"
+
+services:
+  user-service:
+    build:
+      context: ./user
+      dockerfile: Dockerfile
+    image: user-service:1.0.0
+    environment:
+      OTEL_SERVICE_NAME: user-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_RESOURCE_ATTRIBUTES: service.name=user-service
+    ports:
+      - 8080:8080
+
+  store-service:
+    image: store-service:0.0.1
+    container_name: store-service
+    build:
+      context: store
+    ports:
+      - "8000:8000"
+    environment:
+      DB_CONNECTION: user:password@(db:3306)/store
+      SERVICE_NAME: store-service
+      INSECURE_MODE: true
+      OTEL_EXPORTER_OTLP_ENDPOINT: lgtm:4317
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+
+  db:
+    image: mysql:8.3.0
+    container_name: db
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+    volumes:
+      - ./store/tearup/init.sql:/docker-entrypoint-initdb.d/store.sql
+      - ./store/tearup/grantall.sql:/docker-entrypoint-initdb.d/grantall.sql
+    ports:
+      - "3306:3306"
+    restart: always
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  lgtm:
+    image: grafana/otel-lgtm
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "3000:3000" # dashboard
