@@ -68,7 +68,7 @@
    # A scrape configuration containing exactly one endpoint to scrape:
    # Here it's Prometheus itself.
    scrape_configs:
-   - job_name: "spring-actuator"
+   - job_name: "user-service"
 
       metrics_path: "/actuator/prometheus"
 
