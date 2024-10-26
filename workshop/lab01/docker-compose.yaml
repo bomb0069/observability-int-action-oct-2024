@@ -1,0 +1,23 @@
+version: "3.5"
+
+services:
+  user_api:
+    build:
+      context: ./user
+      dockerfile: Dockerfile
+    image: user-service:1.0.0
+    environment:
+      OTEL_SERVICE_NAME: user-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_RESOURCE_ATTRIBUTES: service.name=user-service
+
+    ports:
+      - 8080:8080
+
+  lgtm:
+    image: grafana/otel-lgtm
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "3000:3000" # dashboard
