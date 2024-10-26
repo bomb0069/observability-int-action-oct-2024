@@ -7,7 +7,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o app ./cmd/main.go
 
 FROM alpine:3.20.3
 RUN apk --no-cache add ca-certificates && \
-    apk add tzdata && \
+    apk add --no-cache tzdata && \
     cp /usr/share/zoneinfo/Asia/Bangkok /etc/localtime && \
     echo "Asia/Bangkok" >  /etc/timezone && \
     apk del tzdata
