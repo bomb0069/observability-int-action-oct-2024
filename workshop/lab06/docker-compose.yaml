@@ -1,0 +1,120 @@
+version: "3.5"
+
+services:
+  user-service:
+    build:
+      context: ./user
+      dockerfile: Dockerfile
+    image: user-service:1.0.0
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://user-db:5432/user
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      OTEL_SERVICE_NAME: user-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_RESOURCE_ATTRIBUTES: service.name=user-service
+    ports:
+      - 8080:8080
+    depends_on:
+      lgtm:
+        condition: service_started
+      user-db:
+        condition: service_healthy
+    restart: always
+
+  user-db:
+    image: "postgres:16.3"
+    environment:
+      POSTGRES_DB: user
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./user/tearup/init.sql:/docker-entrypoint-initdb.d/user.sql
+    ports:
+      - "5432:5432"
+    restart: always
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -d $$POSTGRES_DB -h localhost -p 5432 -U $$POSTGRES_USER",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+
+  store-service:
+    image: store-service:0.0.1
+    container_name: store-service
+    build:
+      context: store
+    ports:
+      - "8000:8000"
+    environment:
+      DB_CONNECTION: user:password@(db:3306)/store
+      SERVICE_NAME: store-service
+      INSECURE_MODE: true
+      OTEL_EXPORTER_OTLP_ENDPOINT: lgtm:4317
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+
+  point-service:
+    image: point-service:0.0.1
+    container_name: point-service
+    build:
+      context: point
+    ports:
+      - "8001:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USERNAME: user
+      DB_PASSWORD: password
+
+    restart: always
+
+  db:
+    image: mysql:8.3.0
+    container_name: db
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+    volumes:
+      - ./store/tearup/init.sql:/docker-entrypoint-initdb.d/store.sql
+      - ./store/tearup/grantall.sql:/docker-entrypoint-initdb.d/grantall.sql
+      - ./point/tearup/init.sql:/docker-entrypoint-initdb.d/point.sql
+    ports:
+      - "3306:3306"
+    restart: always
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  lgtm:
+    image: grafana/otel-lgtm
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "3000:3000" # dashboard
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
