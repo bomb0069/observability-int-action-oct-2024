@@ -1,0 +1,60 @@
+services:
+  grafana:
+    image: grafana/grafana
+    ports:
+      - 3001:3000
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  postgres:
+    image: postgres:16.3
+    environment:
+      POSTGRES_DB: user
+      POSTGRES_USER: username
+      POSTGRES_PASSWORD: password
+    volumes:
+      - ./postgres:/docker-entrypoint-initdb.d/
+    ports:
+      - '5434:5432'
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $$POSTGRES_DB -h localhost -p 5432 -U $$POSTGRES_USER"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    ports:
+      - 9187:9187
+    environment:
+      - DATA_SOURCE_URI=postgres:5432/user?sslmode=disable
+      - DATA_SOURCE_USER=username
+      - DATA_SOURCE_PASS=password
+    depends_on:
+      - postgres
+  mysql:
+    image: mysql:8.3.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+    ports:
+      - "3306:3306"
+    restart: always
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+  mysql-exporter:
+    image: prom/mysqld-exporter
+    ports: 
+      - "9104:9104"
+    volumes:
+      - ./.my.cnf:/.my.cnf
+    depends_on:
+      - mysql
